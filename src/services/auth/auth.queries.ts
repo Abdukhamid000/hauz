@@ -1,19 +1,25 @@
 import { mutationOptions } from "@tanstack/react-query";
 
-import { sendSignInCode, type SendSignInCodeResult } from "./auth.functions";
+import {
+  sendSignInCode,
+  verifySignInCode,
+  type SendSignInCodeResult,
+  type VerifySignInCodeResult,
+} from "./auth.functions";
 
-type SendSignInCodeFailure = Extract<SendSignInCodeResult, { ok: false }>["reason"];
+type Failure<Result> = Result extends { ok: false; reason: infer Reason } ? Reason : never;
+export type AuthFailure = Failure<SendSignInCodeResult> | Failure<VerifySignInCodeResult>;
 
 /**
- * The server function reports failures as data. The mutation below turns them
+ * The server functions report failures as data. The mutations below turn them
  * into this error, so components read every failure from `mutation.error`.
  */
-export class SendSignInCodeError extends Error {
-  readonly reason: SendSignInCodeFailure;
+export class AuthError extends Error {
+  readonly reason: AuthFailure;
 
-  constructor(reason: SendSignInCodeFailure) {
-    super(`Could not send the sign-in code (${reason}).`);
-    this.name = "SendSignInCodeError";
+  constructor(reason: AuthFailure) {
+    super(`Sign-in failed (${reason}).`);
+    this.name = "AuthError";
     this.reason = reason;
   }
 }
@@ -25,10 +31,21 @@ export const authMutations = {
       mutationFn: async (email: string) => {
         const result = await sendSignInCode({ data: { email } });
         if (!result.ok) {
-          throw new SendSignInCodeError(result.reason);
+          throw new AuthError(result.reason);
         }
 
         return { userId: result.userId };
+      },
+    }),
+
+  verifySignInCode: () =>
+    mutationOptions({
+      mutationKey: ["auth", "verify-sign-in-code"],
+      mutationFn: async (input: { userId: string; code: string }) => {
+        const result = await verifySignInCode({ data: input });
+        if (!result.ok) {
+          throw new AuthError(result.reason);
+        }
       },
     }),
 };
