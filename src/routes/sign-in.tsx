@@ -2,7 +2,8 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 
-import { sendSignInCode, signInEmailSchema } from "#/server/auth.functions";
+import { signInEmailSchema } from "#/services/auth/auth.functions";
+import { authMutations, SendSignInCodeError } from "#/services/auth/auth.queries";
 
 export const Route = createFileRoute("/sign-in")({ component: SignIn });
 
@@ -29,38 +30,27 @@ function SignIn() {
   return <EmailStep onSent={setSent} />;
 }
 
-const errorMessages = {
-  rate_limited: "Too many codes were requested. Wait a while and try again.",
-  failed: "We could not send the code. Try again.",
-};
-
 function EmailStep({ onSent }: { onSent: (sent: SentCode) => void }) {
-  const [error, setError] = useState<string | null>(null);
-
-  const sendCode = useMutation({
-    mutationFn: (email: string) => sendSignInCode({ data: { email } }),
-    onSuccess: (result, email) => {
-      if (result.ok) {
-        onSent({ email, userId: result.userId });
-      } else {
-        setError(errorMessages[result.reason]);
-      }
-    },
-    onError: () => setError(errorMessages.failed),
-  });
+  const sendCode = useMutation(authMutations.sendSignInCode());
+  const [invalidEmail, setInvalidEmail] = useState(false);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const email = signInEmailSchema.safeParse(new FormData(event.currentTarget).get("email"));
+    setInvalidEmail(!email.success);
     if (!email.success) {
-      setError("Enter a valid email address.");
       return;
     }
 
-    setError(null);
-    sendCode.mutate(email.data);
+    sendCode.mutate(email.data, {
+      onSuccess: ({ userId }, sentTo) => onSent({ email: sentTo, userId }),
+    });
   }
+
+  const error = invalidEmail
+    ? "Enter a valid email address."
+    : sendCode.error && sendCodeErrorMessage(sendCode.error);
 
   return (
     <main>
@@ -80,4 +70,12 @@ function EmailStep({ onSent }: { onSent: (sent: SentCode) => void }) {
       </form>
     </main>
   );
+}
+
+function sendCodeErrorMessage(error: Error) {
+  if (error instanceof SendSignInCodeError && error.reason === "rate_limited") {
+    return "Too many codes were requested. Wait a while and try again.";
+  }
+
+  return "We could not send the code. Try again.";
 }
