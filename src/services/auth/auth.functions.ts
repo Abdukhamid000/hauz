@@ -3,7 +3,7 @@ import { getRequestIP } from "@tanstack/react-start/server";
 import { AppwriteException, ID } from "node-appwrite";
 import { z } from "zod";
 
-import { createAdminClient } from "#/server/appwrite.server";
+import { createAdminClient, logFailure } from "#/server/appwrite.server";
 import { getPersonalAccount } from "#/server/personal-account.server";
 import { allow } from "#/server/rate-limit.server";
 import {
@@ -163,7 +163,6 @@ export type Viewer =
  */
 export const getViewer = createServerFn({ method: "POST" }).handler(
   async (): Promise<Viewer> => {
-    console.log("server");
     const secret = getSessionSecret();
     if (!secret) {
       return { status: "signed_out" };
@@ -196,12 +195,3 @@ export const getViewer = createServerFn({ method: "POST" }).handler(
     }
   },
 );
-
-/** Logs enough to debug. The browser gets none of Appwrite's error, only a reason. */
-function logFailure(operation: string, error: unknown) {
-  if (error instanceof AppwriteException) {
-    console.error(`${operation} failed: ${error.code} ${error.type}`);
-  } else {
-    console.error(`${operation} failed`, error);
-  }
-}

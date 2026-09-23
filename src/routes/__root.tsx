@@ -4,6 +4,7 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
+  redirect,
 } from "@tanstack/react-router";
 
 import { SiteHeader } from "#/components/site-header";
@@ -18,8 +19,18 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   // Runs before every page: on the server for a first page load, in the
   // browser when moving between pages. Either way the answer comes from
   // getViewer on the server, and it is cached so moving around stays fast.
-  beforeLoad: async ({ context }) => {
-    await context.queryClient.query(authQueries.viewer());
+  beforeLoad: async ({ context, location }) => {
+    const viewer = await context.queryClient.query(authQueries.viewer());
+
+    // Someone signed in without an account finishes onboarding before anything
+    // else. That is how a new person passes through it on the way to the page
+    // they were heading for.
+    if (
+      viewer.status === "needs_onboarding" &&
+      location.pathname !== "/onboarding"
+    ) {
+      throw redirect({ to: "/onboarding", search: { redirect: location.href } });
+    }
   },
   head: () => ({
     meta: [

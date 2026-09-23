@@ -1,4 +1,4 @@
-import { Account, Client, Functions } from "node-appwrite";
+import { Account, AppwriteException, Client, Functions } from "node-appwrite";
 
 export function requireEnv(name: string): string {
   const value = process.env[name];
@@ -38,4 +38,13 @@ export function createSessionClient(sessionSecret: string) {
     .setSession(sessionSecret);
 
   return { functions: new Functions(client) };
+}
+
+/** Logs enough to debug. The browser gets none of Appwrite's error, only a reason. */
+export function logFailure(operation: string, error: unknown) {
+  if (error instanceof AppwriteException) {
+    console.error(`${operation} failed: ${error.code} ${error.type}`);
+  } else {
+    console.error(`${operation} failed`, error);
+  }
 }
