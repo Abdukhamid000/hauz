@@ -1,27 +1,37 @@
-import type { QueryClient } from '@tanstack/react-query'
+import type { QueryClient } from "@tanstack/react-query";
 import {
   HeadContent,
+  Outlet,
   Scripts,
   createRootRouteWithContext,
-} from '@tanstack/react-router'
+} from "@tanstack/react-router";
 
-import appCss from '../styles.css?url'
+import { SiteHeader } from "#/components/site-header";
+import { authQueries } from "#/services/auth/auth.queries";
+import appCss from "../styles.css?url";
 
 export interface RouterContext {
-  queryClient: QueryClient
+  queryClient: QueryClient;
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
+  // Runs before every page: on the server for a first page load, in the
+  // browser when moving between pages. Either way the answer comes from
+  // getViewer on the server, and it is cached so moving around stays fast.
+  beforeLoad: async ({ context }) => {
+    await context.queryClient.query(authQueries.viewer());
+  },
   head: () => ({
     meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'HAUZ' },
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "HAUZ" },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootDocument,
-})
+  component: RootLayout,
+});
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
@@ -30,10 +40,20 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {/* The site header belongs here. See TASK.md. */}
         {children}
         <Scripts />
       </body>
     </html>
-  )
+  );
+}
+
+// Renders inside RootDocument's body, and only once beforeLoad has succeeded,
+// so the header always has the viewer.
+function RootLayout() {
+  return (
+    <>
+      <SiteHeader />
+      <Outlet />
+    </>
+  );
 }

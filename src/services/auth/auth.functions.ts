@@ -4,8 +4,13 @@ import { AppwriteException, ID } from "node-appwrite";
 import { z } from "zod";
 
 import { createAdminClient } from "#/server/appwrite.server";
+import { getPersonalAccount } from "#/server/personal-account.server";
 import { allow } from "#/server/rate-limit.server";
-import { setSessionCookie } from "#/server/session.server";
+import {
+  deleteSessionCookie,
+  getSessionSecret,
+  setSessionCookie,
+} from "#/server/session.server";
 
 /** Also used by the sign-in form, so it rejects the same input before calling the server. */
 export const signInEmailSchema = z
@@ -94,7 +99,11 @@ export const verifySignInCode = createServerFn({ method: "POST" })
     // but every guess at one person's code adds to the same count.
     if (
       !allow(`sign-in-attempt:ip:${ip}`, CODE_ATTEMPTS_PER_IP_PER_HOUR, HOUR) ||
-      !allow(`sign-in-attempt:user:${data.userId}`, CODE_ATTEMPTS_PER_USER_PER_HOUR, HOUR)
+      !allow(
+        `sign-in-attempt:user:${data.userId}`,
+        CODE_ATTEMPTS_PER_USER_PER_HOUR,
+        HOUR,
+      )
     ) {
       return { ok: false, reason: "rate_limited" };
     }
@@ -112,7 +121,10 @@ export const verifySignInCode = createServerFn({ method: "POST" })
     } catch (error) {
       // A wrong code, an expired one and an unknown user id all come back as
       // user_invalid_token, so the answer does not reveal which it was.
-      if (error instanceof AppwriteException && error.type === "user_invalid_token") {
+      if (
+        error instanceof AppwriteException &&
+        error.type === "user_invalid_token"
+      ) {
         return { ok: false, reason: "invalid_code" };
       }
 
@@ -124,6 +136,66 @@ export const verifySignInCode = createServerFn({ method: "POST" })
       return { ok: false, reason: "failed" };
     }
   });
+
+/** What the personal-account Function answers with. */
+export type PersonalAccount = {
+  personalAccountId: string;
+  firstName: string;
+  lastName: string;
+  role: "property_owner" | "realtor";
+  contactEmail: string | null;
+  bio: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Who is looking at the page. The header and every page react to one of these. */
+export type Viewer =
+  | { status: "signed_out" }
+  | { status: "needs_onboarding" }
+  | { status: "signed_in"; account: PersonalAccount };
+
+/**
+ * Answers "who is this?" from the session cookie the browser sent.
+ *
+ * POST rather than GET, so no cache between the browser and this server can
+ * keep one person's answer and hand it to someone else.
+ */
+export const getViewer = createServerFn({ method: "POST" }).handler(
+  async (): Promise<Viewer> => {
+    console.log("server");
+    const secret = getSessionSecret();
+    if (!secret) {
+      return { status: "signed_out" };
+    }
+
+    try {
+      const response = await getPersonalAccount(secret);
+      if (response.status === 200) {
+        return {
+          status: "signed_in",
+          account: JSON.parse(response.body) as PersonalAccount,
+        };
+      }
+      if (response.status === 404) {
+        return { status: "needs_onboarding" };
+      }
+
+      throw new Error(`personal-account answered ${response.status}`);
+    } catch (error) {
+      // Only a dead session means signed out. The brief says to sign people out
+      // when loading fails for any reason, but then an Appwrite outage would log
+      // everyone out. Other failures keep the cookie and show an error instead.
+      if (error instanceof AppwriteException && error.code === 401) {
+        deleteSessionCookie();
+        return { status: "signed_out" };
+      }
+
+      logFailure("getViewer", error);
+      throw new Error("Could not check who is signed in. Try again.");
+    }
+  },
+);
 
 /** Logs enough to debug. The browser gets none of Appwrite's error, only a reason. */
 function logFailure(operation: string, error: unknown) {

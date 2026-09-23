@@ -1,6 +1,6 @@
-import { Account, Client } from "node-appwrite";
+import { Account, Client, Functions } from "node-appwrite";
 
-function requireEnv(name: string): string {
+export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`${name} is not set. Copy .env.example to .env and fill it in.`);
@@ -24,4 +24,18 @@ export function createAdminClient() {
     .setKey(requireEnv("APPWRITE_API_KEY"));
 
   return { account: new Account(client) };
+}
+
+/**
+ * An Appwrite client that acts as one signed-in person: it sends their session
+ * secret instead of the API key. Appwrite checks the secret on every call, so
+ * whatever we call this way runs with that person's identity and nothing more.
+ */
+export function createSessionClient(sessionSecret: string) {
+  const client = new Client()
+    .setEndpoint(requireEnv("APPWRITE_ENDPOINT"))
+    .setProject(requireEnv("APPWRITE_PROJECT_ID"))
+    .setSession(sessionSecret);
+
+  return { functions: new Functions(client) };
 }

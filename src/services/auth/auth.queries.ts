@@ -1,14 +1,28 @@
-import { mutationOptions } from "@tanstack/react-query";
+import { mutationOptions, queryOptions } from "@tanstack/react-query";
 
 import {
+  getViewer,
   sendSignInCode,
   verifySignInCode,
   type SendSignInCodeResult,
   type VerifySignInCodeResult,
 } from "./auth.functions";
 
-type Failure<Result> = Result extends { ok: false; reason: infer Reason } ? Reason : never;
-export type AuthFailure = Failure<SendSignInCodeResult> | Failure<VerifySignInCodeResult>;
+export const authQueries = {
+  /** The root route loads this before any page renders, and the header reads it. */
+  viewer: () =>
+    queryOptions({
+      queryKey: ["auth", "viewer"],
+      queryFn: () => getViewer(),
+    }),
+};
+
+type Failure<Result> = Result extends { ok: false; reason: infer Reason }
+  ? Reason
+  : never;
+export type AuthFailure =
+  | Failure<SendSignInCodeResult>
+  | Failure<VerifySignInCodeResult>;
 
 /**
  * The server functions report failures as data. The mutations below turn them
